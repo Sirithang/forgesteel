@@ -9,6 +9,8 @@ import { useNavigation } from '../../../hooks/use-navigation';
 import './app-footer.scss';
 
 import shield from './../../../assets/shield.png';
+import { useEffect, useState } from 'react';
+import { GapiUtils } from '../../../utils/gapi-utils';
 
 interface Props {
 	page: 'welcome' | 'heroes' | 'library' | 'playbook' | 'session' | 'player-view';
@@ -23,7 +25,29 @@ export const AppFooter = (props: Props) => {
 	const isSmall = useMediaQuery('(max-width: 1000px)');
 	const navigation = useNavigation();
 
+	const [ loginVisible, setLoginVisible ] = useState<boolean>(false);
+	const [ loggedIn, setLoggedIn ] = useState<boolean>(false);
+
 	try {
+
+		useEffect(() => {
+			GapiUtils.callbackOnLoaded(onLoaded);
+			GapiUtils.callbackOnLoggedIn(onLoggin);
+			GapiUtils.callbackOnLoggedOut(onLoggout);
+		});
+
+		const onLoaded = () => {
+			setLoginVisible(true);
+		};
+
+		const onLoggin = () => {
+			setLoggedIn(true);
+		};
+
+		const onLoggout = () => {
+			setLoggedIn(false);
+		};
+
 		const getNavigation = () => {
 			const folders = Collections.distinct(props.heroes.map(h => h.folder), f => f).sort();
 			if (folders.length === 0) {
@@ -119,6 +143,7 @@ export const AppFooter = (props: Props) => {
 						<Button onClick={props.showReference}>Reference</Button>
 						<Button onClick={props.showRoll}>Roll</Button>
 						<Button onClick={props.showAbout}>About</Button>
+						{loginVisible ? <Button onClick={loggedIn ? GapiUtils.logOut : GapiUtils.logIn}>{loggedIn ? 'Log out' : 'Log In'}</Button> : null }
 					</div>
 				</div>
 			</ErrorBoundary>

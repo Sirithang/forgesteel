@@ -14,6 +14,9 @@
 	},
 	"dependencies": {
 		"@ant-design/icons": "^6.0.0",
+		"@types/gapi": "^0.0.47",
+		"@types/gapi.client.drive-v3": "^0.0.5",
+		"@types/google.accounts": "^0.0.17",
 		"@types/showdown": "^2.0.6",
 		"antd": "^5.26.4",
 		"gh-pages": "^6.3.0",

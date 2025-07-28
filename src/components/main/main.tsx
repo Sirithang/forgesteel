@@ -2,7 +2,7 @@ import { Adventure, AdventurePackage } from '../../models/adventure';
 import { Monster, MonsterGroup } from '../../models/monster';
 import { Navigate, Route, Routes } from 'react-router';
 import { Playbook, PlaybookElementKind } from '../../models/playbook';
-import { ReactNode, useState } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
 import { Sourcebook, SourcebookElementKind } from '../../models/sourcebook';
 import { Ability } from '../../models/ability';
 import { AbilityModal } from '../modals/ability/ability-modal';
@@ -77,6 +77,7 @@ import { useMediaQuery } from '../../hooks/use-media-query';
 import { useNavigation } from '../../hooks/use-navigation';
 
 import './main.scss';
+import { GapiUtils } from '../../utils/gapi-utils';
 
 interface Props {
 	heroes: Hero[];
@@ -85,6 +86,11 @@ interface Props {
 	homebrewSourcebooks: Sourcebook[];
 	hiddenSourcebookIDs: string[];
 	options: Options;
+}
+
+interface HeroSave {
+	timestamp: Date;
+	heroes: Hero[]
 }
 
 export const Main = (props: Props) => {
@@ -106,6 +112,101 @@ export const Main = (props: Props) => {
 	const [ directory, setDirectory ] = useState<ReactNode>(null);
 	const [ drawer, setDrawer ] = useState<ReactNode>(null);
 	const [ playerView, setPlayerView ] = useState<Window | null>(null);
+
+	//#region GAPI Handling
+	useEffect(() => {
+		GapiUtils.addScript(
+			'https://apis.google.com/js/api.js',
+			'gapi-script',
+			GapiUtils.gapiLoaded);
+		GapiUtils.addScript(
+			'https://accounts.google.com/gsi/client',
+			'google-script',
+			GapiUtils.googleLoaded);
+
+		GapiUtils.callbackOnLoggedIn(loginHappened);
+
+		return () => {
+			GapiUtils.gapiUnloaded();
+			GapiUtils.googleUnloaded();
+
+			GapiUtils.removeScript('gapi-script');
+			GapiUtils.removeScript('google-script');
+		};
+	}, []);
+
+	const loginHappened = async () => {
+		console.log('logging ahppened');
+
+		if(!GapiUtils.isLoggedIn())
+			return;
+
+		//find and handle heros
+
+		let response;
+		try {
+			response = await gapi.client.drive.files.list({
+				spaces: 'appDataFolder',
+				q: 'name = \'hero.json\''
+			});
+		} catch (err) {
+			console.error(err);
+			return;
+		}
+
+		if(response.result.files?.length == 0){
+			//no hero file yet, let's create it
+
+			localforage.getItem<Hero[]>('forgesteel-heroes').then(
+				heroes => {
+
+					//no hero content to save
+					if(heroes == null)
+						return;
+
+					const heroSaveContent: HeroSave = {
+						timestamp: new Date(),
+						heroes: heroes as Hero[]
+					};
+
+					const jsonData = JSON.stringify(heroSaveContent);
+
+					GapiUtils.createFileWithJSONContent({
+						name:'hero.json',
+						mimeType:'application/json',
+						parents: [ 'appDataFolder' ]
+					}, jsonData, resp => {
+						console.error(resp.status);
+					});
+				},
+				err => {
+					console.error(`couldn't get heroes ${err}`);
+				}
+			);
+		} else {
+			const file = (response.result.files as gapi.client.drive.File[])[0] as gapi.client.drive.File;
+			const content = await gapi.client.drive.files.get({ fileId: file.id as string, alt: 'media' });
+
+			const heroSave = JSON.parse(content.body) as HeroSave;
+
+			if(heroSave == null)
+			{
+				//file was malformed, delete it
+				gapi.client.drive.files.delete({ fileId: file.id as string });
+				console.error('hero save was malformed, file deleted');
+			}
+			else
+			{
+				//compare the save data with what we have
+				//TODO: this is a bit lazy, but this is the easiest
+				if(JSON.stringify(heroes) != content.body) {
+					console.log('heroes content is different!!');
+				} else {
+					console.log('heroes content was similar, already backed up');
+				}
+			}
+		}
+	};
 
 	//#region Persistence
 
