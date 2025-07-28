@@ -112,8 +112,10 @@ export const Main = (props: Props) => {
 	const [ directory, setDirectory ] = useState<ReactNode>(null);
 	const [ drawer, setDrawer ] = useState<ReactNode>(null);
 	const [ playerView, setPlayerView ] = useState<Window | null>(null);
+	const [ heroFileId, setHeroFileID ] = useState<string>('');
 
 	//#region GAPI Handling
+
 	useEffect(() => {
 		GapiUtils.addScript(
 			'https://apis.google.com/js/api.js',
@@ -154,37 +156,9 @@ export const Main = (props: Props) => {
 			return;
 		}
 
-		if(response.result.files?.length == 0){
-			//no hero file yet, let's create it
-
-			localforage.getItem<Hero[]>('forgesteel-heroes').then(
-				heroes => {
-
-					//no hero content to save
-					if(heroes == null)
-						return;
-
-					const heroSaveContent: HeroSave = {
-						timestamp: new Date(),
-						heroes: heroes as Hero[]
-					};
-
-					const jsonData = JSON.stringify(heroSaveContent);
-
-					GapiUtils.createFileWithJSONContent({
-						name:'hero.json',
-						mimeType:'application/json',
-						parents: [ 'appDataFolder' ]
-					}, jsonData, resp => {
-						console.error(resp.status);
-					});
-				},
-				err => {
-					console.error(`couldn't get heroes ${err}`);
-				}
-			);
-		} else {
+		if(response.result.files?.length != 0) {
 			const file = (response.result.files as gapi.client.drive.File[])[0] as gapi.client.drive.File;
+			setHeroFileID(file.id !== undefined ? file.id : '');
 			const content = await gapi.client.drive.files.get({ fileId: file.id as string, alt: 'media' });
 
 			const heroSave = JSON.parse(content.body) as HeroSave;
@@ -199,12 +173,33 @@ export const Main = (props: Props) => {
 			{
 				//compare the save data with what we have
 				//TODO: this is a bit lazy, but this is the easiest
-				if(JSON.stringify(heroes) != content.body) {
+				if(JSON.stringify(heroes) != JSON.stringify(heroSave.heroes)) {
 					console.log('heroes content is different!!');
 				} else {
 					console.log('heroes content was similar, already backed up');
 				}
 			}
+		} else {
+			//create the file if it does not exist
+			const heroSaveContent: HeroSave = {
+				timestamp: new Date(),
+				heroes: heroes as Hero[]
+			};
+
+			const jsonData = JSON.stringify(heroSaveContent);
+
+			GapiUtils.createFileWithJSONContent({
+				name:'hero.json',
+				mimeType:'application/json',
+				parents: [ 'appDataFolder' ]
+			}, jsonData, resp => {
+				const fileMetadata = resp as gapi.client.drive.File;
+				if(fileMetadata == null) {
+					console.error('error creating heros file on Google Drive');
+				} else {
+					setHeroFileID(fileMetadata.id !== undefined ? fileMetadata.id : '');
+				}
+			});
 		}
 	};
 
@@ -214,7 +209,29 @@ export const Main = (props: Props) => {
 		return localforage
 			.setItem<Hero[]>('forgesteel-heroes', Collections.sort(heroes, h => h.name))
 			.then(
-				setHeroes,
+				content => {
+					setHeroes(content);
+
+					if(GapiUtils.isLoggedIn()) {
+
+						if(heroFileId == '')
+							return;
+
+						const heroSaveContent: HeroSave = {
+							timestamp: new Date(),
+							heroes: heroes as Hero[]
+						};
+
+						const jsonData = JSON.stringify(heroSaveContent);
+
+						console.log(`persiting with file id ${heroFileId}`);
+
+						GapiUtils.updateFileWithJSONContent(heroFileId as string,
+							jsonData, resp => {
+								console.log(resp);
+							});
+					}
+				},
 				err => {
 					console.error(err);
 					notify.error({

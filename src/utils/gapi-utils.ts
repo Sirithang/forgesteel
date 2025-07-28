@@ -34,7 +34,7 @@ export class GapiUtils {
 		if (gapi.client.getToken() === null) {
 			// Prompt the user to select a Google Account and ask for consent to share their data
 			// when establishing a new session.
-			GapiUtils._googleToken.requestAccessToken({ prompt: 'consent' });
+			GapiUtils._googleToken.requestAccessToken({ prompt: '' });
 		} else {
 			// Skip display of account chooser and consent dialog for an existing session.
 			GapiUtils._googleToken.requestAccessToken({ prompt: '' });
@@ -66,8 +66,6 @@ export class GapiUtils {
 					GapiUtils.checkLoggedInCallbacks();
 				}
 			});
-
-			console.log(GapiUtils._googleToken);
 		}
 	};
 
@@ -150,7 +148,7 @@ export class GapiUtils {
 	};
 
 	// eslint-disable-next-line  @typescript-eslint/no-explicit-any
-	static createFileWithJSONContent = function(metadata: gapi.client.drive.File, data: string,callback: ((response:gapi.client.Response<any>) => void)) {
+	static createFileWithJSONContent = function(metadata: gapi.client.drive.File, data: string, callback: (rawResponse:any) => void) {
 		const boundary = '-------314159265358979323846';
 		const delimiter = '\r\n--' + boundary + '\r\n';
 		const close_delim = '\r\n--' + boundary + '--';
@@ -166,14 +164,36 @@ export class GapiUtils {
         data +
         close_delim;
 
-		const request = gapi.client.request({
-			'path': '/upload/drive/v3/files',
-			'method': 'POST',
-			'params': { 'uploadType': 'multipart' },
-			'headers': {
+		const reqOption: gapi.client.RequestOptions = {
+			path: '/upload/drive/v3/files',
+			method: 'POST',
+			params: { 'uploadType': 'multipart' },
+			headers: {
 				'Content-Type': 'multipart/related; boundary="' + boundary + '"'
 			},
-			'body': multipartRequestBody });
+			body: multipartRequestBody
+		};
+
+
+		// The type we import for drive clash with the more recent google client def, so we need to force the type to
+		// be HttpRequest and NOT Request, as Request will not have the right execute signature
+		const request = gapi.client.request(reqOption);
+		request.execute(callback);
+	};
+
+	// eslint-disable-next-line  @typescript-eslint/no-explicit-any
+	static updateFileWithJSONContent = function(fileId: string, data: string, callback: (rawResponse:any) => void) {
+
+		const request = gapi.client.request({
+			path: `/upload/drive/v3/files/${fileId}`,
+			method: 'PATCH',
+			params: { 'uploadType': 'media' },
+			headers: {
+				'Content-Type': 'application/json'
+			},
+			body: data
+		});
+
 		request.execute(callback);
 	};
 }
