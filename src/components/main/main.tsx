@@ -2,7 +2,7 @@ import { Adventure, AdventurePackage } from '../../models/adventure';
 import { Monster, MonsterGroup } from '../../models/monster';
 import { Navigate, Route, Routes } from 'react-router';
 import { Playbook, PlaybookElementKind } from '../../models/playbook';
-import { ReactNode, useEffect, useState } from 'react';
+import { ReactNode, useCallback, useEffect, useState } from 'react';
 import { Sourcebook, SourcebookElementKind } from '../../models/sourcebook';
 import { Ability } from '../../models/ability';
 import { AbilityModal } from '../modals/ability/ability-modal';
@@ -72,12 +72,13 @@ import { Title } from '../../models/title';
 import { Utils } from '../../utils/utils';
 import { WelcomePage } from '../pages/welcome/welcome-page';
 import localforage from 'localforage';
-import { notification } from 'antd';
+import { Modal, notification } from 'antd';
 import { useMediaQuery } from '../../hooks/use-media-query';
 import { useNavigation } from '../../hooks/use-navigation';
 
 import './main.scss';
 import { GapiUtils } from '../../utils/gapi-utils';
+import useModal from 'antd/es/modal/useModal';
 
 interface Props {
 	heroes: Hero[];
@@ -114,31 +115,13 @@ export const Main = (props: Props) => {
 	const [ playerView, setPlayerView ] = useState<Window | null>(null);
 	const [ heroFileId, setHeroFileID ] = useState<string>('');
 
+	const [ modal, contextHolder ] = Modal.useModal();
+
 	//#region GAPI Handling
 
-	useEffect(() => {
-		GapiUtils.addScript(
-			'https://apis.google.com/js/api.js',
-			'gapi-script',
-			GapiUtils.gapiLoaded);
-		GapiUtils.addScript(
-			'https://accounts.google.com/gsi/client',
-			'google-script',
-			GapiUtils.googleLoaded);
-
-		GapiUtils.callbackOnLoggedIn(loginHappened);
-
-		return () => {
-			GapiUtils.gapiUnloaded();
-			GapiUtils.googleUnloaded();
-
-			GapiUtils.removeScript('gapi-script');
-			GapiUtils.removeScript('google-script');
-		};
-	}, []);
-
-	const loginHappened = async () => {
+	const loginHappened = useCallback(async () => {
 		console.log('logging ahppened');
+		console.log(Modal.confirm);
 
 		if(!GapiUtils.isLoggedIn())
 			return;
@@ -174,7 +157,21 @@ export const Main = (props: Props) => {
 				//compare the save data with what we have
 				//TODO: this is a bit lazy, but this is the easiest
 				if(JSON.stringify(heroes) != JSON.stringify(heroSave.heroes)) {
+
 					console.log('heroes content is different!!');
+					//we need to ask the user : to they want to
+					modal.confirm({
+						title:'Heroes save conflict!',
+						content:`The heroes saved on Google drive are different that the local ones.\n The google drive save is from ${heroSave.timestamp}`,
+						okText:'Use Google Drive Heroes',
+						okType:'danger',
+						cancelText:'Save local to Google Drive',
+						onOk() {
+							setHeroes(heroSave.heroes);
+						},
+						onCancel() {
+							persistHeroes(heroes);
+						} });
 				} else {
 					console.log('heroes content was similar, already backed up');
 				}
@@ -201,7 +198,28 @@ export const Main = (props: Props) => {
 				}
 			});
 		}
-	};
+	}, [ modal, heroes, setHeroes ]);
+
+	useEffect(() => {
+		GapiUtils.addScript(
+			'https://apis.google.com/js/api.js',
+			'gapi-script',
+			GapiUtils.gapiLoaded);
+		GapiUtils.addScript(
+			'https://accounts.google.com/gsi/client',
+			'google-script',
+			GapiUtils.googleLoaded);
+
+		GapiUtils.callbackOnLoggedIn(loginHappened);
+
+		return () => {
+			GapiUtils.gapiUnloaded();
+			GapiUtils.googleUnloaded();
+
+			GapiUtils.removeScript('gapi-script');
+			GapiUtils.removeScript('google-script');
+		};
+	}, [ loginHappened ]);
 
 	//#region Persistence
 
@@ -212,6 +230,7 @@ export const Main = (props: Props) => {
 				content => {
 					setHeroes(content);
 
+					// Check for remote storage if we are logged in
 					if(GapiUtils.isLoggedIn()) {
 
 						if(heroFileId == '')
@@ -1713,6 +1732,7 @@ export const Main = (props: Props) => {
 						</Route>
 					</Route>
 				</Routes>
+				<div>{contextHolder}</div>
 				{notifyContext}
 			</ErrorBoundary>
 		);

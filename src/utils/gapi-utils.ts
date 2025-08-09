@@ -6,6 +6,7 @@ export class GapiUtils {
 	private static _isLoggedIn = false;
 	private static _googleToken: google.accounts.oauth2.TokenClient;
 
+	static LOCAL_STORAGE_NAME = 'forge-steel-login-token';
 	static SCOPES = 'https://www.googleapis.com/auth/drive.appdata';
 
 	static ready = () => {return GapiUtils.gapiScriptLoaded && GapiUtils.googleScriptLoaded && GapiUtils.gapiClientInit;};
@@ -28,27 +29,35 @@ export class GapiUtils {
 	};
 	static googleUnloaded = () => { GapiUtils.googleScriptLoaded = false; };
 
-	static logIn() {
-		console.log('login');
-		console.log(GapiUtils._googleToken);
-		if (gapi.client.getToken() === null) {
-			// Prompt the user to select a Google Account and ask for consent to share their data
-			// when establishing a new session.
-			GapiUtils._googleToken.requestAccessToken({ prompt: '' });
-		} else {
-			// Skip display of account chooser and consent dialog for an existing session.
-			GapiUtils._googleToken.requestAccessToken({ prompt: '' });
+	static autoLoginIfPossible() {
+
+		if(GapiUtils._isLoggedIn)
+			return;
+
+		const savedToken = localStorage.getItem(this.LOCAL_STORAGE_NAME);
+		if(savedToken !== null) {
+			gapi.client.setToken({ access_token: savedToken as string });
+			GapiUtils._isLoggedIn = true;
+			GapiUtils.checkLoggedInCallbacks();
 		}
+	}
+
+	static logIn() {
+		GapiUtils._googleToken.requestAccessToken({ prompt: 'consent' });
 	}
 
 	static logOut() {
 		const token = gapi.client.getToken();
 		if (token !== null) {
 			google.accounts.oauth2.revoke(token.access_token, () => {});
-			gapi.client.setToken(null);
-			GapiUtils._isLoggedIn = false;
-			GapiUtils.checkLoggedOutCallbacks();
 		}
+
+		gapi.client.setToken(null);
+		GapiUtils._isLoggedIn = false;
+		console.log('logging out removing saved token');
+		localStorage.removeItem(this.LOCAL_STORAGE_NAME);
+		GapiUtils.checkLoggedOutCallbacks();
+
 	}
 
 	static checkLoadedCallbacks = () => {
@@ -63,6 +72,7 @@ export class GapiUtils {
 						throw (resp);
 					}
 					GapiUtils._isLoggedIn = true;
+					localStorage.setItem(this.LOCAL_STORAGE_NAME, gapi.client.getToken().access_token);
 					GapiUtils.checkLoggedInCallbacks();
 				}
 			});

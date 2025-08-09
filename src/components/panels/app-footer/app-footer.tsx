@@ -38,6 +38,8 @@ export const AppFooter = (props: Props) => {
 
 		const onLoaded = () => {
 			setLoginVisible(true);
+			//check if we can auto login
+			GapiUtils.autoLoginIfPossible();
 		};
 
 		const onLoggin = () => {
