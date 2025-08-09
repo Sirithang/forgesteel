@@ -78,6 +78,7 @@ import { useMediaQuery } from '../../hooks/use-media-query';
 import { useNavigation } from '../../hooks/use-navigation';
 
 import './main.scss';
+import { EncounterPDFexport } from '../../utils/encounter-export';
 
 interface Props {
 	heroes: Hero[];
@@ -1076,6 +1077,8 @@ export const Main = (props: Props) => {
 		if (kind === 'adventure') {
 			const ap = PlaybookLogic.getAdventurePackage(element as Adventure, playbook);
 			Utils.export([ ap.adventure.id ], ap.adventure.name || 'Adventure', ap, 'adventure', 'json');
+		} else if (kind === 'encounter' && format == 'pdf') {
+			EncounterPDFexport.startExport(element as Encounter, SourcebookLogic.getSourcebooks(homebrewSourcebooks));
 		} else {
 			Utils.export([ element.id ], element.name || Format.capitalize(kind), element, kind, format);
 		}
